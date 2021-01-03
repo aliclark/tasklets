@@ -30,6 +30,12 @@ export interface Tasklet<Result> extends Promise<Result> {
 
 class TimeoutError extends Error {}
 
+class WorkError extends Error {
+    constructor(public readonly problem: Error) {
+        super(`Problem while contracting work: ${problem}`)
+    }
+}
+
 class CancellationError extends Error {
     constructor(public readonly problem: Error) {
         super(`Problem while cancelling work: ${problem}`)
@@ -108,7 +114,11 @@ export class Tasklet<Result> implements Tasklet<Result> {
         this.options.timeout * 1000)
 
         if (typeof contract === 'function') {
-            work = contract(outcome => outcome instanceof Error ? rejected(outcome) : fulfilled(outcome), rejected)
+            try {
+                work = contract(outcome => outcome instanceof Error ? rejected(outcome) : fulfilled(outcome), rejected)
+            } catch (problem) {
+                rejected(new WorkError(problem))
+            }
         } else {
             contract.then(fulfilled, rejected)
         }
