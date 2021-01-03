@@ -324,7 +324,7 @@ export function gather<Result>(tasklets: { [K in keyof Result]: Tasklet<Result[K
         options = { timeout: 0 }
     }
 
-    return new Tasklet<Result>(options).contracted(done => {
+    return new Tasklet<Result>(options).contracted((done, rejected) => {
 
         const result: Partial<Result> = {}
         let size = 0
@@ -332,9 +332,9 @@ export function gather<Result>(tasklets: { [K in keyof Result]: Tasklet<Result[K
 
         for (const key in tasklets) {
 
-            tasklets[key].or(error => otherwise => {
-                done(error)
-                otherwise(error)
+            tasklets[key].or(error => (otherwise, rejectedListener) => {
+                rejected(error)
+                rejectedListener(error)
             }).errors(() => null)
 
             tasklets[key].and(value => then => {
