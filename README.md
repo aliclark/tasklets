@@ -1,7 +1,7 @@
 # Tasklets
 
 ```typescript
-import { make, gather, Tasklet } from '../src'
+import { make, gather, Tasklet } from '@aliclark/tasklets'
 
 const homeId = 42
 
