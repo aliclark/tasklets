@@ -317,7 +317,7 @@ export function make<Result>(contract: Contract<Result>, options?: Options): Tas
     return new Tasklet<Result>(options).contracted(contract)
 }
 
-export function gather<Result>(tasklets: { [K in keyof Result]: Tasklet<Result[K]> }, options?: Options): Tasklet<{ [K in keyof Result]: Result[K] }> {
+export function gather<Result>(tasklets: { [K in keyof Result]: PromiseLike<Result[K]> }, options?: Options): Tasklet<{ [K in keyof Result]: Result[K] }> {
 
     if (options === undefined || options === null) {
         // Defer to the timeouts of the underlying tasklets by default
@@ -332,19 +332,18 @@ export function gather<Result>(tasklets: { [K in keyof Result]: Tasklet<Result[K
 
         for (const key in tasklets) {
 
-            tasklets[key].or(error => (otherwise, rejectedListener) => {
-                rejected(error)
-                rejectedListener(error)
-            }).errors(() => null)
-
-            tasklets[key].and(value => then => {
+            tasklets[key].then(value => {
                 result[key] = value
                 resolutions += 1
                 if (resolutions === size) {
                     done(result as Result)
                 }
-                then(value)
-            }).results(() => null)
+                return value
+            },
+            error => {
+                rejected(error)
+                return error
+            })
 
             size += 1
         }
