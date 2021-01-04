@@ -151,7 +151,7 @@ export class Tasklet<Result> implements Tasklet<Result> {
         process.nextTick(() => {
             if (this.errorHandlers.length > 0) {
                 this.errorHandlers.forEach(rejected => Tasklet.handleRejection(rejected, error));
-            } else {
+            } else if (!isPromise) {
                 console.warn(error)
             }
         })
