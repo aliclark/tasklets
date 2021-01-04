@@ -275,57 +275,49 @@ export class Tasklet<Result> implements Tasklet<Result> {
 
     then<TResult1 = Result, TResult2 = never>(onfulfilled?: (Result: Result) => TResult1 | PromiseLike<TResult1>, onrejected?: (reason: any) => TResult2 | PromiseLike<TResult2>): Promise<TResult1 | TResult2> {
 
-        if (onfulfilled === undefined) {
-            // It's not possible to go from 'Result' type to 'TResult1' without an onfulfilled callback
-            throw new Error("An onfulfilled handler must be supplied.")
-        }
-
         // Retain the Promise semantics of having timeout on the contract fulfillment
         const tasklet = new Tasklet<TResult1 | TResult2>({ timeout: 0 })
 
-        let resolved = false
-        const guard = (type: Outcome) => {
-            if (type !== this.outcome) return true
-            const previous = resolved
-            resolved = true
-            return previous
-        }
+        if (onfulfilled === undefined) {
+            // It's not possible to go from 'Result' type to 'TResult1' without an onfulfilled callback
+            tasklet.rejected(new Error("An onfulfilled handler must be supplied."), true)
+        } else {
 
-        this.errors(error => {
-            if (guard(Outcome.Error)) return
+            this.or(error => otherwise => {
 
-            if (onrejected === undefined) {
-                tasklet.rejected(error)
-            } else {
+                if (onrejected === undefined) {
+                    tasklet.rejected(error, true)
+                } else {
+                    try {
+                        const out = onrejected(error)
+
+                        if (isPromiseLikeShape(out)) {
+                            tasklet.contracted(out)
+                        } else {
+                            tasklet.fulfilled(out, true)
+                        }
+                    } catch (problem) {
+                        tasklet.rejected(new RejectionError(error, problem), true)
+                    }
+                }
+                otherwise(error)
+
+            }).and(result => done => {
                 try {
-                    const out = onrejected(error)
+                    const out = onfulfilled(result)
 
                     if (isPromiseLikeShape(out)) {
                         tasklet.contracted(out)
                     } else {
-                        tasklet.fulfilled(out)
+                        tasklet.fulfilled(out, true)
                     }
                 } catch (problem) {
-                    tasklet.rejected(new RejectionError(error, problem))
+                    tasklet.rejected(new FulfillmentError(result, problem), true)
                 }
-            }
-        })
+                done(result)
 
-        this.results(result => {
-            if (guard(Outcome.Result)) return
-
-            try {
-                const out = onfulfilled(result)
-
-                if (isPromiseLikeShape(out)) {
-                    tasklet.contracted(out)
-                } else {
-                    tasklet.fulfilled(out, true)
-                }
-            } catch (problem) {
-                tasklet.rejected(new FulfillmentError(result, problem))
-            }
-        })
+            }).errors(() => { return }).results(() => { return })
+        }
 
         return tasklet
     }
