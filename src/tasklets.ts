@@ -64,24 +64,20 @@ function isWorkShape(obj: any): obj is Work {
 
 export class Tasklet<Result> implements Tasklet<Result> {
 
+    private static defaultOptions: Options = { timeout: 8 }
     private options: Options
     private timer?: ReturnType<typeof setTimeout>
 
-    constructor(
+    constructor
+    (
         options?: Options,
-        private defaultTimeout: number = 8,
-        private defaultOptions: Options = { timeout: defaultTimeout },
         private resolvedErrors: Error[] = [],
         private resolvedResults: Result[] = [],
         private errorHandlers: ((error: Error) => unknown)[] = [],
         private resultHandlers: ((result: Result) => unknown)[] = [],
-        private outcome: Outcome = Outcome.Uninitialized) {
-
-        if (options === undefined || options === null) {
-            this.options = this.defaultOptions
-        } else {
-            this.options = options
-        }
+        private outcome: Outcome = Outcome.Uninitialized
+    ) {
+        this.options = { ...Tasklet.defaultOptions, ...options }
     }
 
     private initialise(timer: () => void): void {
