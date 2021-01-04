@@ -1,4 +1,3 @@
-
 interface Work {
     cancel: () => unknown
 }
@@ -17,7 +16,7 @@ enum Outcome {
     Uninitialized,
     Pending,
     Error,
-    Result
+    Result,
 }
 
 export interface Tasklet<Result> extends Promise<Result> {
@@ -55,7 +54,7 @@ class FulfillmentError<Result> extends Error {
 }
 
 function isPromiseLikeShape<T>(obj: any): obj is PromiseLike<T> {
-    return obj !== undefined && obj !== null && typeof obj.then === 'function' 
+    return obj !== undefined && obj !== null && typeof obj.then === 'function'
 }
 
 function isWorkShape(obj: any): obj is Work {
@@ -63,13 +62,11 @@ function isWorkShape(obj: any): obj is Work {
 }
 
 export class Tasklet<Result> implements Tasklet<Result> {
-
     private static defaultOptions: Options = { timeout: 8 }
     private options: Options
     private timer?: ReturnType<typeof setTimeout>
 
-    constructor
-    (
+    constructor(
         options?: Options,
         private resolvedErrors: Error[] = [],
         private resolvedResults: Result[] = [],
@@ -81,7 +78,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
     }
 
     private initialise(timer: () => void): void {
-
         if (this.outcome !== Outcome.Uninitialized) {
             this.rejected(new Error('This tasklet already has a contract defined'))
         } else {
@@ -91,7 +87,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
     }
 
     contracted(contract: Contract<Result>): Tasklet<Result> {
-
         this.initialise(() => {
             if (isWorkShape(work)) {
                 try {
@@ -112,7 +107,10 @@ export class Tasklet<Result> implements Tasklet<Result> {
             contract.then(fulfilled, rejected)
         } else {
             try {
-                work = contract(outcome => outcome instanceof Error ? rejected(outcome) : fulfilled(outcome), rejected)
+                work = contract(
+                    outcome => (outcome instanceof Error ? rejected(outcome) : fulfilled(outcome)),
+                    rejected
+                )
             } catch (problem) {
                 rejected(new WorkError(problem))
             }
@@ -154,7 +152,7 @@ export class Tasklet<Result> implements Tasklet<Result> {
 
         process.nextTick(() => {
             if (this.errorHandlers.length > 0) {
-                this.errorHandlers.forEach(rejected => Tasklet.handleRejection(rejected, error));
+                this.errorHandlers.forEach(rejected => Tasklet.handleRejection(rejected, error))
             } else if (!isPromise) {
                 console.warn(error)
             }
@@ -192,7 +190,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
     }
 
     or(rejected: (error: Error) => Contract<Result>, options?: Options): Tasklet<Result> {
-
         const tasklet = new Tasklet<Result>(options)
 
         let resolved = false
@@ -204,7 +201,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
         }
 
         this.errors(error => {
-
             if (guarded(Outcome.Error)) {
                 // FIXME: why is this logging unexpectedly? More handlers than expected?
                 //if (this.errorHandlers.length <= 1) { console.warn(error) }
@@ -219,7 +215,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
         })
 
         this.results(result => {
-
             if (guarded(Outcome.Result)) {
                 // FIXME: why is this logging unexpectedly? More handlers than expected?
                 //if (this.resultHandlers.length <= 1) { console.trace(result) }
@@ -233,7 +228,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
     }
 
     and<New>(fulfilled: (result: Result) => Contract<New>, options?: Options): Tasklet<New> {
-
         const tasklet = new Tasklet<New>(options)
 
         let resolved = false
@@ -245,7 +239,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
         }
 
         this.errors(error => {
-
             if (guarded(Outcome.Error)) {
                 // FIXME: why is this logging unexpectedly? More handlers than expected?
                 //if (this.errorHandlers.length <= 1) { console.warn(error) }
@@ -256,7 +249,6 @@ export class Tasklet<Result> implements Tasklet<Result> {
         })
 
         this.results(result => {
-
             if (guarded(Outcome.Result)) {
                 // FIXME: why is this logging unexpectedly? More handlers than expected?
                 //if (this.resultHandlers.length <= 1) { console.trace(result) }
@@ -275,18 +267,18 @@ export class Tasklet<Result> implements Tasklet<Result> {
 
     [Symbol.toStringTag]: string = 'Tasklet'
 
-    then<TResult1 = Result, TResult2 = never>(onfulfilled?: (Result: Result) => TResult1 | PromiseLike<TResult1>, onrejected?: (reason: any) => TResult2 | PromiseLike<TResult2>): Promise<TResult1 | TResult2> {
-
+    then<TResult1 = Result, TResult2 = never>(
+        onfulfilled?: (Result: Result) => TResult1 | PromiseLike<TResult1>,
+        onrejected?: (reason: any) => TResult2 | PromiseLike<TResult2>
+    ): Promise<TResult1 | TResult2> {
         // Retain the Promise semantics of having timeout on the contract fulfillment
         const tasklet = new Tasklet<TResult1 | TResult2>({ timeout: 0 })
 
         if (onfulfilled === undefined) {
             // It's not possible to go from 'Result' type to 'TResult1' without an onfulfilled callback
-            tasklet.rejected(new Error("An onfulfilled handler must be supplied."), true)
+            tasklet.rejected(new Error('An onfulfilled handler must be supplied.'), true)
         } else {
-
             this.or(error => otherwise => {
-
                 if (onrejected === undefined) {
                     tasklet.rejected(error, true)
                 } else {
@@ -303,22 +295,27 @@ export class Tasklet<Result> implements Tasklet<Result> {
                     }
                 }
                 otherwise(error)
+            })
+                .and(result => done => {
+                    try {
+                        const out = onfulfilled(result)
 
-            }).and(result => done => {
-                try {
-                    const out = onfulfilled(result)
-
-                    if (isPromiseLikeShape(out)) {
-                        tasklet.contracted(out)
-                    } else {
-                        tasklet.fulfilled(out, true)
+                        if (isPromiseLikeShape(out)) {
+                            tasklet.contracted(out)
+                        } else {
+                            tasklet.fulfilled(out, true)
+                        }
+                    } catch (problem) {
+                        tasklet.rejected(new FulfillmentError(result, problem), true)
                     }
-                } catch (problem) {
-                    tasklet.rejected(new FulfillmentError(result, problem), true)
-                }
-                done(result)
-
-            }).errors(() => { return }).results(() => { return })
+                    done(result)
+                })
+                .errors(() => {
+                    return
+                })
+                .results(() => {
+                    return
+                })
         }
 
         return tasklet
@@ -333,33 +330,35 @@ export function make<Result>(contract: Contract<Result>, options?: Options): Tas
     return new Tasklet<Result>(options).contracted(contract)
 }
 
-export function gather<Result>(tasklets: { [K in keyof Result]: PromiseLike<Result[K]> }, options?: Options): Tasklet<{ [K in keyof Result]: Result[K] }> {
-
+export function gather<Result>(
+    tasklets: { [K in keyof Result]: PromiseLike<Result[K]> },
+    options?: Options
+): Tasklet<{ [K in keyof Result]: Result[K] }> {
     if (options === undefined || options === null) {
         // Defer to the timeouts of the underlying tasklets by default
         options = { timeout: 0 }
     }
 
     return new Tasklet<Result>(options).contracted((done, rejected) => {
-
         const result: Partial<Result> = {}
         let size = 0
         let resolutions = 0
 
         for (const key in tasklets) {
-
-            tasklets[key].then(value => {
-                result[key] = value
-                resolutions += 1
-                if (resolutions === size) {
-                    done(result as Result)
+            tasklets[key].then(
+                value => {
+                    result[key] = value
+                    resolutions += 1
+                    if (resolutions === size) {
+                        done(result as Result)
+                    }
+                    return value
+                },
+                error => {
+                    rejected(error)
+                    return error
                 }
-                return value
-            },
-            error => {
-                rejected(error)
-                return error
-            })
+            )
 
             size += 1
         }
