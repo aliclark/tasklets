@@ -194,7 +194,7 @@ export class Tasklet<Result> implements Tasklet<Result> {
         const tasklet = new Tasklet<Result>(options)
 
         let resolved = false
-        const guard = (type: Outcome) => {
+        const guarded = (type: Outcome) => {
             if (type !== this.outcome) return true
             const previous = resolved
             resolved = true
@@ -202,7 +202,12 @@ export class Tasklet<Result> implements Tasklet<Result> {
         }
 
         this.errors(error => {
-            if (guard(Outcome.Error)) return
+
+            if (guarded(Outcome.Error)) {
+                // FIXME: why is this logging unexpectedly? More handlers than expected?
+                //if (this.errorHandlers.length <= 1) { console.warn(error) }
+                return
+            }
 
             try {
                 tasklet.contracted(rejected(error))
@@ -212,7 +217,13 @@ export class Tasklet<Result> implements Tasklet<Result> {
         })
 
         this.results(result => {
-            if (guard(Outcome.Result)) return
+
+            if (guarded(Outcome.Result)) {
+                // FIXME: why is this logging unexpectedly? More handlers than expected?
+                //if (this.resultHandlers.length <= 1) { console.trace(result) }
+                return
+            }
+
             tasklet.fulfilled(result)
         })
 
@@ -224,7 +235,7 @@ export class Tasklet<Result> implements Tasklet<Result> {
         const tasklet = new Tasklet<New>(options)
 
         let resolved = false
-        const guard = (type: Outcome) => {
+        const guarded = (type: Outcome) => {
             if (type !== this.outcome) return true
             const previous = resolved
             resolved = true
@@ -232,12 +243,23 @@ export class Tasklet<Result> implements Tasklet<Result> {
         }
 
         this.errors(error => {
-            if (guard(Outcome.Error)) return
+
+            if (guarded(Outcome.Error)) {
+                // FIXME: why is this logging unexpectedly? More handlers than expected?
+                //if (this.errorHandlers.length <= 1) { console.warn(error) }
+                return
+            }
+
             tasklet.rejected(error)
         })
 
         this.results(result => {
-            if (guard(Outcome.Result)) return
+
+            if (guarded(Outcome.Result)) {
+                // FIXME: why is this logging unexpectedly? More handlers than expected?
+                //if (this.resultHandlers.length <= 1) { console.trace(result) }
+                return
+            }
 
             try {
                 tasklet.contracted(fulfilled(result))
