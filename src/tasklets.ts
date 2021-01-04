@@ -271,7 +271,7 @@ export class Tasklet<Result> implements Tasklet<Result> {
         return tasklet
     }
 
-    [Symbol.toStringTag]: string = 'TaskletImpl<Result>'
+    [Symbol.toStringTag]: string = 'Tasklet'
 
     then<TResult1 = Result, TResult2 = never>(onfulfilled?: (Result: Result) => TResult1 | PromiseLike<TResult1>, onrejected?: (reason: any) => TResult2 | PromiseLike<TResult2>): Promise<TResult1 | TResult2> {
 
