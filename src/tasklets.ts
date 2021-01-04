@@ -65,6 +65,7 @@ function isWorkShape(obj: any): obj is Work {
 export class Tasklet<Result> implements Tasklet<Result> {
 
     private options: Options
+    private timer?: ReturnType<typeof setTimeout>
 
     constructor(
         options?: Options,
@@ -83,25 +84,19 @@ export class Tasklet<Result> implements Tasklet<Result> {
         }
     }
 
-    contracted(contract: Contract<Result>): Tasklet<Result> {
+    private initialise(timer: () => void): void {
 
         if (this.outcome !== Outcome.Uninitialized) {
-            throw new Error('This tasklet already has a contract defined')
+            this.rejected(new Error('This tasklet already has a contract defined'))
+        } else {
+            this.outcome = Outcome.Pending
+            this.timer = this.options.timeout === 0 ? undefined : setTimeout(timer, this.options.timeout * 1000)
         }
-        this.outcome = Outcome.Pending
+    }
 
-        const rejected = (error: Error) => {
-            if (timer !== undefined) { clearTimeout(timer) }
-            this.rejected(error)
-        }
+    contracted(contract: Contract<Result>): Tasklet<Result> {
 
-        const fulfilled = (result: Result) => {
-            if (timer !== undefined) { clearTimeout(timer) }
-            this.fulfilled(result)
-        }
-
-        let work: unknown = null
-        const timer = this.options.timeout === 0 ? undefined : setTimeout(() => {
+        this.initialise(() => {
             if (isWorkShape(work)) {
                 try {
                     work.cancel()
@@ -110,17 +105,21 @@ export class Tasklet<Result> implements Tasklet<Result> {
                 }
             }
             rejected(new TimeoutError())
-        },
-        this.options.timeout * 1000)
+        })
 
-        if (typeof contract === 'function') {
+        const rejected = (error: Error) => this.rejected(error, isPromiseLikeShape(contract))
+        const fulfilled = (result: Result) => this.fulfilled(result, isPromiseLikeShape(contract))
+
+        let work: unknown
+
+        if (isPromiseLikeShape(contract)) {
+            contract.then(fulfilled, rejected)
+        } else {
             try {
                 work = contract(outcome => outcome instanceof Error ? rejected(outcome) : fulfilled(outcome), rejected)
             } catch (problem) {
                 rejected(new WorkError(problem))
             }
-        } else {
-            contract.then(fulfilled, rejected)
         }
 
         return this
@@ -142,10 +141,19 @@ export class Tasklet<Result> implements Tasklet<Result> {
         }
     }
 
-    private rejected(error: Error): Tasklet<Result> {
-        if (this.outcome !== Outcome.Result) {
-            this.outcome = Outcome.Error
+    private resolution(outcome: Outcome) {
+        if (this.timer !== undefined) {
+            clearTimeout(this.timer)
+            this.timer = undefined
         }
+
+        if (this.outcome <= Outcome.Pending) {
+            this.outcome = outcome
+        }
+    }
+
+    private rejected(error: Error, isPromise = false): Tasklet<Result> {
+        this.resolution(Outcome.Error)
         this.resolvedErrors.push(error)
 
         process.nextTick(() => {
@@ -159,9 +167,7 @@ export class Tasklet<Result> implements Tasklet<Result> {
     }
 
     private fulfilled(result: Result, isPromise = false): Tasklet<Result> {
-        if (this.outcome !== Outcome.Error) {
-            this.outcome = Outcome.Result
-        }
+        this.resolution(Outcome.Result)
         this.resolvedResults.push(result)
 
         process.nextTick(() => {
