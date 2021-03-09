@@ -1,4 +1,5 @@
 # Tasklets
+## Alternative API for Promises designed for TypeScript.
 
 ```typescript
 import { make, gather, Tasklet } from '@aliclark/tasklets'
